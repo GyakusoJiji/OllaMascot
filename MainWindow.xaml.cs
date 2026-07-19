@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -29,6 +30,7 @@ namespace OllaMonitor
         private DetailsViewMode _currentMode = DetailsViewMode.SystemDetails;
         private List<OllamaClient.ActiveModel> _activeModels = new List<OllamaClient.ActiveModel>();
         private bool _isOllamaReachable = false;
+        private bool _restartPromptShown = false;
 
         public MainWindow()
         {
@@ -196,16 +198,22 @@ namespace OllaMonitor
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
                     StatusFooterText.Text = "Ollama connection failed";
+                    OllamaRestartButton.Visibility = Visibility.Visible;
+                    PromptOllamaRestart();
                 }
                 else if (_activeModels.Count == 0)
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(142, 142, 147)); // System Gray
                     StatusFooterText.Text = "Ollama is idle";
+                    OllamaRestartButton.Visibility = Visibility.Collapsed;
+                    _restartPromptShown = false;
                 }
                 else
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(48, 209, 88)); // System Green
                     StatusFooterText.Text = $"{_activeModels.Count} model(s) active";
+                    OllamaRestartButton.Visibility = Visibility.Collapsed;
+                    _restartPromptShown = false;
                 }
             }
             catch
@@ -213,6 +221,28 @@ namespace OllaMonitor
                 _isOllamaReachable = false;
                 OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
                 StatusFooterText.Text = "Ollama connection error";
+                OllamaRestartButton.Visibility = Visibility.Visible;
+                PromptOllamaRestart();
+            }
+        }
+
+        private void PromptOllamaRestart()
+        {
+            // Show the dialog only once per offline period; reset when Ollama comes back online
+            if (_restartPromptShown)
+                return;
+            _restartPromptShown = true;
+
+            var result = MessageBox.Show(
+                this,
+                "Ollamaが起動していません。\nOllamaを再起動しますか？",
+                "OllaMonitor - Ollama未検出",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                StartOllama();
             }
         }
 
@@ -535,6 +565,47 @@ namespace OllaMonitor
         private void ContextExit_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        // Ollama restart handler
+        private void OllamaRestartButton_Click(object sender, RoutedEventArgs e)
+        {
+            StartOllama();
+        }
+
+        private void StartOllama()
+        {
+            try
+            {
+                // Discover ollama CLI executable path; fall back to "ollama" on PATH
+                string ollamaPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Programs", "Ollama", "ollama.exe"
+                );
+
+                if (!System.IO.File.Exists(ollamaPath))
+                {
+                    ollamaPath = "ollama";
+                }
+
+                // Launch the server headless: no console window, no tray icon
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = ollamaPath,
+                    Arguments = "serve",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
+
+                StatusFooterText.Text = "Starting Ollama...";
+                OllamaRestartButton.Visibility = Visibility.Collapsed;
+                App.Log("Ollama restart requested.");
+            }
+            catch (Exception ex)
+            {
+                StatusFooterText.Text = "Failed to start Ollama";
+                App.Log($"Exception starting Ollama: {ex}");
+            }
         }
     }
 }
