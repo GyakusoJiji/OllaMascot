@@ -7,6 +7,7 @@ namespace OllaMonitor
     public class Settings
     {
         public string OllamaUrl { get; set; } = "http://localhost:11434";
+        public string OllamaStartCommand { get; set; } = "ollama serve";
         public double RefreshIntervalSeconds { get; set; } = 2.0;
         public bool AlwaysOnTop { get; set; } = true;
 

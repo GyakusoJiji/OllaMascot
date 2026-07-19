@@ -295,10 +295,21 @@
                     </Grid>
 
                     <!-- Settings Controls -->
-                    <StackPanel Grid.Row="1" Margin="20">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="20,12,20,12">
                         <!-- Ollama URL setting -->
                         <TextBlock Text="OLLAMA API URL" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <TextBox x:Name="OllamaUrlInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="11" Margin="0,0,0,15">
+                        <TextBox x:Name="OllamaUrlInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="11" Margin="0,0,0,12">
+                            <TextBox.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                            </TextBox.Resources>
+                        </TextBox>
+
+                        <!-- Ollama start command setting -->
+                        <TextBlock Text="OLLAMA START COMMAND" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBox x:Name="OllamaStartCommandInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="11" Margin="0,0,0,12" ToolTip="例: ollama serve / ollama run gemma3:12b">
                             <TextBox.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -308,7 +319,7 @@
 
                         <!-- Refresh Interval setting -->
                         <TextBlock Text="REFRESH INTERVAL (SECONDS)" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <Grid Margin="0,0,0,15">
+                        <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="40"/>
@@ -318,7 +329,7 @@
                         </Grid>
 
                         <!-- Always on Top setting -->
-                        <Grid Margin="0,0,0,25">
+                        <Grid Margin="0,0,0,15">
                             <TextBlock Text="ALWAYS ON TOP" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" VerticalAlignment="Center"/>
                             <CheckBox x:Name="AlwaysOnTopCheckbox" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
@@ -341,6 +352,7 @@
                             </Button.Style>
                         </Button>
                     </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
         </Border>

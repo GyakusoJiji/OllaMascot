@@ -518,6 +518,7 @@ namespace OllaMonitor
         {
             // Populate inputs from live settings
             OllamaUrlInput.Text = _settings.OllamaUrl;
+            OllamaStartCommandInput.Text = _settings.OllamaStartCommand;
             RefreshRateSlider.Value = _settings.RefreshIntervalSeconds;
             RefreshRateLabel.Text = $"{_settings.RefreshIntervalSeconds:F0}s";
             AlwaysOnTopCheckbox.IsChecked = _settings.AlwaysOnTop;
@@ -534,6 +535,9 @@ namespace OllaMonitor
         private void SaveSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             _settings.OllamaUrl = OllamaUrlInput.Text;
+            _settings.OllamaStartCommand = string.IsNullOrWhiteSpace(OllamaStartCommandInput.Text)
+                ? "ollama serve"
+                : OllamaStartCommandInput.Text.Trim();
             _settings.RefreshIntervalSeconds = RefreshRateSlider.Value;
             _settings.AlwaysOnTop = AlwaysOnTopCheckbox.IsChecked == true;
             _settings.Save();
@@ -588,11 +592,23 @@ namespace OllaMonitor
                     ollamaPath = "ollama";
                 }
 
+                // The stored command can be pasted verbatim (e.g. "ollama run gemma3:12b");
+                // strip the leading "ollama" token since the executable path is resolved above
+                string command = (_settings.OllamaStartCommand ?? "").Trim();
+                if (command.Length == 0 || command.Equals("ollama", StringComparison.OrdinalIgnoreCase))
+                {
+                    command = "serve";
+                }
+                else if (command.StartsWith("ollama ", StringComparison.OrdinalIgnoreCase))
+                {
+                    command = command.Substring("ollama ".Length).Trim();
+                }
+
                 // Launch the server headless: no console window, no tray icon
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = ollamaPath,
-                    Arguments = "serve",
+                    Arguments = command,
                     CreateNoWindow = true,
                     UseShellExecute = false
                 });
