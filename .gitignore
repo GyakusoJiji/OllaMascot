@@ -1,0 +1,18 @@
+# Build artifacts
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio / IDE files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Diagnostics
+*.log
