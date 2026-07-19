@@ -21,6 +21,15 @@ namespace OllaMonitor
         private readonly List<double> _gpuHistory = new List<double>();
         private readonly List<double> _vramHistory = new List<double>();
 
+        private enum DetailsViewMode
+        {
+            SystemDetails,
+            ActiveModels
+        }
+        private DetailsViewMode _currentMode = DetailsViewMode.SystemDetails;
+        private List<OllamaClient.ActiveModel> _activeModels = new List<OllamaClient.ActiveModel>();
+        private bool _isOllamaReachable = false;
+
         public MainWindow()
         {
             App.Log("MainWindow constructor started.");
@@ -119,7 +128,6 @@ namespace OllaMonitor
 
                     RamText.Text = $"{ramPercent:F1}%";
                     RamProgress.Value = ramPercent;
-                    TotalRamText.Text = $"{usedRamGb:F1} / {totalRamGb:F1} GB";
                     UpdateSparkline(RamPolyline, RamCanvas, _ramHistory, ramPercent);
                 }
 
@@ -136,7 +144,6 @@ namespace OllaMonitor
 
                     VramText.Text = $"{usedVramGb:F1} GB";
                     VramProgress.Value = vramPercent;
-                    TotalVramText.Text = $"{usedVramGb:F1} / {totalVramGb:F1} GB";
                     UpdateSparkline(VramPolyline, VramCanvas, _vramHistory, vramPercent);
                 }
                 else
@@ -148,12 +155,14 @@ namespace OllaMonitor
 
                     VramText.Text = "N/A";
                     VramProgress.Value = 0;
-                    TotalVramText.Text = "N/A";
                     UpdateSparkline(VramPolyline, VramCanvas, _vramHistory, 0);
                 }
 
-                // 4. Ollama Active Models
+                // 4. Ollama Active Models Query
                 await QueryOllamaStatus();
+                
+                // 5. Update Unified Details List
+                RefreshDetailsDisplay();
             }
             catch (Exception ex)
             {
@@ -165,14 +174,9 @@ namespace OllaMonitor
         {
             try
             {
-                var models = await OllamaClient.GetActiveModelsAsync(_settings.OllamaUrl);
+                _activeModels = await OllamaClient.GetActiveModelsAsync(_settings.OllamaUrl);
                 
-                // Update Ollama Online Indicator
-                // Green: Responsive, active models running
-                // Blue: Responsive, idle (no models)
-                // Red: Unresponsive (exception caught in client)
-                
-                bool isOllamaReachable = true;
+                _isOllamaReachable = true;
                 
                 // Quick connectivity ping
                 using (var pingClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMilliseconds(500) })
@@ -180,46 +184,206 @@ namespace OllaMonitor
                     try
                     {
                         var res = await pingClient.GetAsync(_settings.OllamaUrl.TrimEnd('/') + "/api/tags");
-                        isOllamaReachable = res.IsSuccessStatusCode;
+                        _isOllamaReachable = res.IsSuccessStatusCode;
                     }
                     catch
                     {
-                        isOllamaReachable = false;
+                        _isOllamaReachable = false;
                     }
                 }
 
-                if (!isOllamaReachable)
+                if (!_isOllamaReachable)
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
-                    OllamaStatusMessage.Text = "Ollama is offline or unreachable.";
-                    OllamaEmptyBorder.Visibility = Visibility.Visible;
-                    ActiveModelsList.Visibility = Visibility.Collapsed;
                     StatusFooterText.Text = "Ollama connection failed";
                 }
-                else if (models.Count == 0)
+                else if (_activeModels.Count == 0)
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(142, 142, 147)); // System Gray
-                    OllamaStatusMessage.Text = "Ollama is idle. No models loaded.";
-                    OllamaEmptyBorder.Visibility = Visibility.Visible;
-                    ActiveModelsList.Visibility = Visibility.Collapsed;
                     StatusFooterText.Text = "Ollama is idle";
                 }
                 else
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(48, 209, 88)); // System Green
-                    OllamaEmptyBorder.Visibility = Visibility.Collapsed;
-                    ActiveModelsList.Visibility = Visibility.Visible;
-                    ActiveModelsList.ItemsSource = models;
-                    StatusFooterText.Text = $"{models.Count} model(s) active";
+                    StatusFooterText.Text = $"{_activeModels.Count} model(s) active";
                 }
             }
             catch
             {
+                _isOllamaReachable = false;
                 OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
-                OllamaStatusMessage.Text = "Ollama connection error.";
-                OllamaEmptyBorder.Visibility = Visibility.Visible;
-                ActiveModelsList.Visibility = Visibility.Collapsed;
+                StatusFooterText.Text = "Ollama connection error";
             }
+        }
+
+        private void DetailsHeaderButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Toggle view mode
+            _currentMode = _currentMode == DetailsViewMode.SystemDetails 
+                ? DetailsViewMode.ActiveModels 
+                : DetailsViewMode.SystemDetails;
+                
+            // Update header text
+            DetailsHeaderText.Text = _currentMode == DetailsViewMode.SystemDetails 
+                ? "SYSTEM DETAILS ⇅" 
+                : "ACTIVE MODELS ⇅";
+                
+            // Refresh list display immediately
+            RefreshDetailsDisplay();
+        }
+
+        private void RefreshDetailsDisplay()
+        {
+            try
+            {
+                DetailsListBox.Items.Clear();
+
+                if (_currentMode == DetailsViewMode.SystemDetails)
+                {
+                    // 1. RAM info
+                    if (HardwareMonitor.GetRamMetrics(out ulong totalRam, out ulong usedRam))
+                    {
+                        double totalRamGb = totalRam / 1073741824.0;
+                        double usedRamGb = usedRam / 1073741824.0;
+                        double ramPercent = totalRamGb > 0 ? (usedRamGb / totalRamGb) * 100.0 : 0.0;
+                        DetailsListBox.Items.Add(CreateSystemDetailItem("System Memory:", $"{usedRamGb:F1} / {totalRamGb:F1} GB ({ramPercent:F0}%)"));
+                    }
+                    
+                    // 2. VRAM info
+                    if (Nvml.IsAvailable && Nvml.GetGpuMetrics(out _, out ulong totalVram, out ulong usedVram))
+                    {
+                        double totalVramGb = totalVram / 1073741824.0;
+                        double usedVramGb = usedVram / 1073741824.0;
+                        double vramPercent = totalVramGb > 0 ? (usedVramGb / totalVramGb) * 100.0 : 0.0;
+                        DetailsListBox.Items.Add(CreateSystemDetailItem("Graphics VRAM:", $"{usedVramGb:F1} / {totalVramGb:F1} GB ({vramPercent:F0}%)"));
+                    }
+                    else
+                    {
+                        DetailsListBox.Items.Add(CreateSystemDetailItem("Graphics VRAM:", "N/A"));
+                    }
+
+                    // 3. GPU Model
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("GPU Model:", Nvml.IsAvailable ? Nvml.GpuName : "None / Non-Nvidia"));
+                    
+                    // 4. Ollama URL
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Endpoint:", _settings.OllamaUrl));
+                }
+                else // ActiveModels
+                {
+                    if (!_isOllamaReachable)
+                    {
+                        DetailsListBox.Items.Add(CreateMessageItem("Ollama is offline or unreachable."));
+                    }
+                    else if (_activeModels.Count == 0)
+                    {
+                        DetailsListBox.Items.Add(CreateMessageItem("Ollama is idle. No models loaded."));
+                    }
+                    else
+                    {
+                        foreach (var model in _activeModels)
+                        {
+                            DetailsListBox.Items.Add(CreateActiveModelItem(model));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Exception in RefreshDetailsDisplay: {ex}");
+            }
+        }
+
+        private ListBoxItem CreateSystemDetailItem(string label, string value)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            
+            var labelTxt = new TextBlock 
+            { 
+                Text = label, 
+                Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), 
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center 
+            };
+            
+            var valTxt = new TextBlock 
+            { 
+                Text = value, 
+                Foreground = Brushes.White, 
+                FontSize = 10, 
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center 
+            };
+            Grid.SetColumn(valTxt, 1);
+            
+            grid.Children.Add(labelTxt);
+            grid.Children.Add(valTxt);
+            
+            return new ListBoxItem { Content = grid, Padding = new Thickness(0, 1, 0, 1), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
+        }
+
+        private ListBoxItem CreateActiveModelItem(OllamaClient.ActiveModel model)
+        {
+            var mainStack = new StackPanel { Margin = new Thickness(0, 1, 0, 1) };
+            
+            var headerGrid = new Grid();
+            var nameStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            nameStack.Children.Add(new TextBlock { Text = "⬤ ", Foreground = new SolidColorBrush(Color.FromRgb(48, 213, 200)), FontSize = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
+            nameStack.Children.Add(new TextBlock { Text = model.Name, Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
+            
+            var badgeBorder = new Border 
+            { 
+                Background = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)), 
+                CornerRadius = new CornerRadius(3), 
+                Padding = new Thickness(4, 1, 4, 1), 
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            badgeBorder.Child = new TextBlock { Text = model.Details.ParameterSize, Foreground = new SolidColorBrush(Color.FromRgb(142, 142, 147)), FontSize = 8, FontWeight = FontWeights.SemiBold };
+            
+            headerGrid.Children.Add(nameStack);
+            headerGrid.Children.Add(badgeBorder);
+            
+            var infoTxt = new TextBlock { Text = model.FormattedVramInfo, Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), FontSize = 9, Margin = new Thickness(0, 3, 0, 3) };
+            
+            var progress = new ProgressBar 
+            { 
+                Height = 3, 
+                Value = model.VramPercentage, 
+                Background = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)), 
+                Foreground = new SolidColorBrush(Color.FromRgb(48, 213, 200)), 
+                BorderThickness = new Thickness(0) 
+            };
+            
+            mainStack.Children.Add(headerGrid);
+            mainStack.Children.Add(infoTxt);
+            mainStack.Children.Add(progress);
+            
+            var border = new Border 
+            { 
+                Background = new SolidColorBrush(Color.FromArgb(12, 255, 255, 255)), 
+                CornerRadius = new CornerRadius(6), 
+                Padding = new Thickness(8, 6, 8, 6), 
+                Margin = new Thickness(0, 0, 0, 4) 
+            };
+            border.Child = mainStack;
+            
+            return new ListBoxItem { Content = border, Padding = new Thickness(0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
+        }
+
+        private ListBoxItem CreateMessageItem(string message)
+        {
+            var txt = new TextBlock 
+            { 
+                Text = message, 
+                Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), 
+                FontSize = 10, 
+                HorizontalAlignment = HorizontalAlignment.Center, 
+                TextAlignment = TextAlignment.Center, 
+                Margin = new Thickness(10) 
+            };
+            return new ListBoxItem { Content = txt, Padding = new Thickness(0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
         }
 
         private void UpdateSparkline(Polyline polyline, Canvas canvas, List<double> history, double newValue)

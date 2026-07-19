@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:OllaMonitor"
         mc:Ignorable="d"
         Title="OllaMonitor" 
-        Height="550" 
+        Height="300" 
         Width="350"
         WindowStyle="None" 
         AllowsTransparency="True" 
@@ -63,9 +63,11 @@
             <Grid ClipToBounds="True">
                 <!-- Main Grid Layout -->
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="45"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="35"/>
+                    <RowDefinition Height="40"/>  <!-- Header -->
+                    <RowDefinition Height="110"/> <!-- Cards -->
+                    <RowDefinition Height="Auto"/> <!-- Details Header -->
+                    <RowDefinition Height="*"/>    <!-- Unified ListBox -->
+                    <RowDefinition Height="30"/>   <!-- Footer -->
                 </Grid.RowDefinitions>
 
                 <!-- Header Bar -->
@@ -133,134 +135,104 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Core Dashboard Area -->
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="10,10,5,5">
-                    <StackPanel>
-                        <!-- Grid of system metrics cards -->
-                        <Grid Margin="0,0,5,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                <!-- Core Dashboard Area (Fixed Row 1) -->
+                <Grid Grid.Row="1" Margin="10,6,5,2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                            <!-- CPU Card -->
-                            <Border Grid.Row="0" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,10" Padding="10">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="CPU" Foreground="#80FFFFFF" FontSize="11" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="CpuText" Text="0.0%" Foreground="#FF0A84FF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <ProgressBar x:Name="CpuProgress" Height="4" Margin="0,8,0,8" Background="#20FFFFFF" Foreground="#FF0A84FF" BorderThickness="0" MaxHeight="4"/>
-                                    <!-- Sparkline -->
-                                    <Canvas x:Name="CpuCanvas" Height="25" Background="#05FFFFFF" ClipToBounds="True">
-                                        <Polyline x:Name="CpuPolyline" Stroke="#FF0A84FF" StrokeThickness="1"/>
-                                    </Canvas>
-                                </StackPanel>
-                            </Border>
+                    <!-- CPU Card -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,6" Padding="8,5">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="CPU" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="CpuText" Text="0.0%" Foreground="#FF0A84FF" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <ProgressBar x:Name="CpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF0A84FF" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas x:Name="CpuCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                                <Polyline x:Name="CpuPolyline" Stroke="#FF0A84FF" StrokeThickness="1"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Border>
 
-                            <!-- RAM Card -->
-                            <Border Grid.Row="0" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,10" Padding="10">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="RAM" Foreground="#80FFFFFF" FontSize="11" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="RamText" Text="0.0%" Foreground="#FFBF00FF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <ProgressBar x:Name="RamProgress" Height="4" Margin="0,8,0,8" Background="#20FFFFFF" Foreground="#FFBF00FF" BorderThickness="0" MaxHeight="4"/>
-                                    <!-- Sparkline -->
-                                    <Canvas x:Name="RamCanvas" Height="25" Background="#05FFFFFF" ClipToBounds="True">
-                                        <Polyline x:Name="RamPolyline" Stroke="#FFBF00FF" StrokeThickness="1"/>
-                                    </Canvas>
-                                </StackPanel>
-                            </Border>
+                    <!-- RAM Card -->
+                    <Border Grid.Row="0" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,6" Padding="8,5">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="RAM" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="RamText" Text="0.0%" Foreground="#FFBF00FF" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <ProgressBar x:Name="RamProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFBF00FF" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas x:Name="RamCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                                <Polyline x:Name="RamPolyline" Stroke="#FFBF00FF" StrokeThickness="1"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Border>
 
-                            <!-- GPU Card -->
-                            <Border Grid.Row="1" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,10" Padding="10">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="GPU" Foreground="#80FFFFFF" FontSize="11" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="GpuText" Text="0%" Foreground="#FF30D5C8" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <ProgressBar x:Name="GpuProgress" Height="4" Margin="0,8,0,8" Background="#20FFFFFF" Foreground="#FF30D5C8" BorderThickness="0" MaxHeight="4"/>
-                                    <!-- Sparkline -->
-                                    <Canvas x:Name="GpuCanvas" Height="25" Background="#05FFFFFF" ClipToBounds="True">
-                                        <Polyline x:Name="GpuPolyline" Stroke="#FF30D5C8" StrokeThickness="1"/>
-                                    </Canvas>
-                                </StackPanel>
-                            </Border>
+                    <!-- GPU Card -->
+                    <Border Grid.Row="1" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,0" Padding="8,5">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="GPU" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="GpuText" Text="0%" Foreground="#FF30D5C8" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <ProgressBar x:Name="GpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF30D5C8" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas x:Name="GpuCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                                <Polyline x:Name="GpuPolyline" Stroke="#FF30D5C8" StrokeThickness="1"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Border>
 
-                            <!-- VRAM Card -->
-                            <Border Grid.Row="1" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,10" Padding="10">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="VRAM" Foreground="#80FFFFFF" FontSize="11" FontWeight="SemiBold"/>
-                                        <TextBlock x:Name="VramText" Text="0.0 GB" Foreground="#FFFF9F0A" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <ProgressBar x:Name="VramProgress" Height="4" Margin="0,8,0,8" Background="#20FFFFFF" Foreground="#FFFF9F0A" BorderThickness="0" MaxHeight="4"/>
-                                    <!-- Sparkline -->
-                                    <Canvas x:Name="VramCanvas" Height="25" Background="#05FFFFFF" ClipToBounds="True">
-                                        <Polyline x:Name="VramPolyline" Stroke="#FFFF9F0A" StrokeThickness="1"/>
-                                    </Canvas>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
+                    <!-- VRAM Card -->
+                    <Border Grid.Row="1" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,0" Padding="8,5">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Text="VRAM" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="VramText" Text="0.0 GB" Foreground="#FFFF9F0A" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <ProgressBar x:Name="VramProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFFF9F0A" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas x:Name="VramCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                                <Polyline x:Name="VramPolyline" Stroke="#FFFF9F0A" StrokeThickness="1"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
-                        <!-- System Details -->
-                        <Border Background="#0CFFFFFF" CornerRadius="8" Padding="10" Margin="0,0,5,10">
-                            <StackPanel>
-                                <Grid Margin="0,0,0,6">
-                                    <TextBlock Text="System Details" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
-                                </Grid>
-                                <Grid Margin="0,2,0,2">
-                                    <TextBlock Text="Total Memory:" Foreground="#80FFFFFF" FontSize="11"/>
-                                    <TextBlock x:Name="TotalRamText" Text="0.0 GB" Foreground="White" FontSize="11" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Grid Margin="0,2,0,2">
-                                    <TextBlock Text="Total VRAM:" Foreground="#80FFFFFF" FontSize="11"/>
-                                    <TextBlock x:Name="TotalVramText" Text="0.0 GB" Foreground="White" FontSize="11" HorizontalAlignment="Right"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
+                <!-- Details Switch Header (Row 2) -->
+                <Button x:Name="DetailsHeaderButton" Grid.Row="2" Click="DetailsHeaderButton_Click" Background="#10FFFFFF" BorderThickness="0" Margin="10,5,10,3" Padding="8,4" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                        </Style>
+                    </Button.Resources>
+                    <Grid HorizontalAlignment="Stretch">
+                        <TextBlock x:Name="DetailsHeaderText" Text="SYSTEM DETAILS ⇅" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                    </Grid>
+                </Button>
 
-                        <!-- Ollama Running Models List -->
-                        <TextBlock Text="ACTIVE MODELS (Ollama)" Foreground="White" FontSize="12" FontWeight="SemiBold" Margin="5,5,0,8"/>
-                        
-                        <!-- Empty list placeholder -->
-                        <Border x:Name="OllamaEmptyBorder" Background="#0CFFFFFF" CornerRadius="8" Padding="15" Margin="0,0,5,10">
-                            <TextBlock x:Name="OllamaStatusMessage" Text="Ollama is idle. No models loaded." Foreground="#80FFFFFF" FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"/>
-                        </Border>
-
-                        <ItemsControl x:Name="ActiveModelsList" Margin="0,0,5,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,0,8" Padding="10">
-                                        <StackPanel>
-                                            <Grid>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="⬤" Foreground="#FF30D5C8" FontSize="8" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{Binding Name}" Foreground="White" FontSize="12" FontWeight="Bold"/>
-                                                </StackPanel>
-                                                <Border Background="#20FFFFFF" CornerRadius="3" Padding="4,1" HorizontalAlignment="Right">
-                                                    <TextBlock Text="{Binding Details.ParameterSize}" Foreground="#FF8E8E93" FontSize="9" FontWeight="SemiBold"/>
-                                                </Border>
-                                            </Grid>
-                                            
-                                            <TextBlock Text="{Binding FormattedVramInfo}" Foreground="#80FFFFFF" FontSize="10" Margin="0,6,0,6"/>
-                                            
-                                            <ProgressBar Height="4" Value="{Binding VramPercentage}" Background="#15FFFFFF" Foreground="#FF30D5C8" BorderThickness="0" MaxHeight="4"/>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                <!-- Consolidated details ListBox (Row 3) -->
+                <ListBox x:Name="DetailsListBox" Grid.Row="3" Background="Transparent" BorderThickness="0" Margin="10,0,10,4" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <!-- Bypass default Windows ListBox item hover highlights -->
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <ContentPresenter />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
 
                 <!-- Footer Bar -->
-                <Grid Grid.Row="2" Background="#0AFFFFFF">
+                <Grid Grid.Row="4" Background="#0AFFFFFF">
                     <TextBlock x:Name="StatusFooterText" Text="System monitoring active" Foreground="#60FFFFFF" FontSize="10" VerticalAlignment="Center" Margin="15,0,0,0"/>
                     <Button Click="GearButton_Click" Background="Transparent" BorderThickness="0" Width="30" Height="25" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" Cursor="Hand">
                         <Button.Template>
@@ -279,7 +251,7 @@
                 </Grid>
 
                 <!-- Expandable Settings Sliding Panel -->
-                <Grid x:Name="SettingsPanel" Grid.Row="0" Grid.RowSpan="3" Background="#F018181A" Visibility="Collapsed">
+                <Grid x:Name="SettingsPanel" Grid.Row="0" Grid.RowSpan="5" Background="#F018181A" Visibility="Collapsed">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="45"/>
                         <RowDefinition Height="*"/>
