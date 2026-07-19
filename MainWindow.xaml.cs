@@ -28,7 +28,10 @@ namespace OllaMonitor
             ActiveModels
         }
         private DetailsViewMode _currentMode = DetailsViewMode.SystemDetails;
+        private bool _detailsExpanded = false;
         private List<OllamaClient.ActiveModel> _activeModels = new List<OllamaClient.ActiveModel>();
+        private readonly Dictionary<string, OllamaClient.ShowResponse?> _modelInfoCache = new Dictionary<string, OllamaClient.ShowResponse?>();
+        private string? _ollamaVersion = null;
         private bool _isOllamaReachable = false;
         private bool _restartPromptShown = false;
 
@@ -176,21 +179,29 @@ namespace OllaMonitor
         {
             try
             {
-                _activeModels = await OllamaClient.GetActiveModelsAsync(_settings.OllamaUrl);
-                
-                _isOllamaReachable = true;
-                
-                // Quick connectivity ping
-                using (var pingClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMilliseconds(500) })
+                // Reachability is judged by the /api/ps call itself; the previous
+                // separate 500ms ping to /api/tags timed out routinely and reported
+                // "connection failed" even while Ollama was healthy
+                var (reachable, models) = await OllamaClient.TryGetActiveModelsAsync(_settings.OllamaUrl);
+                _activeModels = models;
+                _isOllamaReachable = reachable;
+
+                // Fetch the server version once per online period; drop it when offline
+                if (!reachable)
                 {
-                    try
+                    _ollamaVersion = null;
+                }
+                else if (_ollamaVersion == null)
+                {
+                    _ollamaVersion = await OllamaClient.GetVersionAsync(_settings.OllamaUrl);
+                }
+
+                // Fetch /api/show info once per model; retry next tick if it failed
+                foreach (var model in _activeModels)
+                {
+                    if (!_modelInfoCache.TryGetValue(model.Name, out var cached) || cached == null)
                     {
-                        var res = await pingClient.GetAsync(_settings.OllamaUrl.TrimEnd('/') + "/api/tags");
-                        _isOllamaReachable = res.IsSuccessStatusCode;
-                    }
-                    catch
-                    {
-                        _isOllamaReachable = false;
+                        _modelInfoCache[model.Name] = await OllamaClient.GetModelInfoAsync(_settings.OllamaUrl, model.Name);
                     }
                 }
 
@@ -235,8 +246,8 @@ namespace OllaMonitor
 
             var result = MessageBox.Show(
                 this,
-                "Ollamaが起動していません。\nOllamaを再起動しますか？",
-                "OllaMonitor - Ollama未検出",
+                "Ollama is not running.\nDo you want to restart Ollama?",
+                "OllaMonitor - Ollama Not Detected",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -248,16 +259,45 @@ namespace OllaMonitor
 
         private void DetailsHeaderButton_Click(object sender, RoutedEventArgs e)
         {
+            _detailsExpanded = !_detailsExpanded;
+            ApplyDetailsExpansion();
+        }
+
+        private void ApplyDetailsExpansion()
+        {
+            if (_detailsExpanded)
+            {
+                // Shrink the graph area to its compact size and give the rest to the list
+                CardsRow.Height = new GridLength(130);
+                DetailsRow.Height = new GridLength(1, GridUnitType.Star);
+                DetailsListBox.Visibility = Visibility.Visible;
+                DetailsModeButton.Visibility = Visibility.Visible;
+                DetailsChevron.Text = "▲";
+                RefreshDetailsDisplay();
+            }
+            else
+            {
+                // Collapse the list; the graph area reclaims all flexible space
+                CardsRow.Height = new GridLength(1, GridUnitType.Star);
+                DetailsRow.Height = GridLength.Auto;
+                DetailsListBox.Visibility = Visibility.Collapsed;
+                DetailsModeButton.Visibility = Visibility.Collapsed;
+                DetailsChevron.Text = "▼";
+            }
+        }
+
+        private void DetailsModeButton_Click(object sender, RoutedEventArgs e)
+        {
             // Toggle view mode
-            _currentMode = _currentMode == DetailsViewMode.SystemDetails 
-                ? DetailsViewMode.ActiveModels 
+            _currentMode = _currentMode == DetailsViewMode.SystemDetails
+                ? DetailsViewMode.ActiveModels
                 : DetailsViewMode.SystemDetails;
-                
+
             // Update header text
-            DetailsHeaderText.Text = _currentMode == DetailsViewMode.SystemDetails 
-                ? "SYSTEM DETAILS ⇅" 
-                : "ACTIVE MODELS ⇅";
-                
+            DetailsHeaderText.Text = _currentMode == DetailsViewMode.SystemDetails
+                ? "SYSTEM DETAILS"
+                : "ACTIVE MODELS";
+
             // Refresh list display immediately
             RefreshDetailsDisplay();
         }
@@ -266,6 +306,9 @@ namespace OllaMonitor
         {
             try
             {
+                if (!_detailsExpanded)
+                    return;
+
                 DetailsListBox.Items.Clear();
 
                 if (_currentMode == DetailsViewMode.SystemDetails)
@@ -297,6 +340,15 @@ namespace OllaMonitor
                     
                     // 4. Ollama URL
                     DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Endpoint:", _settings.OllamaUrl));
+
+                    // 5. Ollama version
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Version:", _ollamaVersion ?? "N/A"));
+
+                    // 6. Currently loaded LLM model(s)
+                    string modelNames = _activeModels.Count > 0
+                        ? string.Join(", ", _activeModels.ConvertAll(m => m.Name))
+                        : "None";
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("Active Model:", modelNames));
                 }
                 else // ActiveModels
                 {
@@ -333,7 +385,7 @@ namespace OllaMonitor
             { 
                 Text = label, 
                 Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), 
-                FontSize = 10,
+                FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center 
             };
             
@@ -341,7 +393,7 @@ namespace OllaMonitor
             { 
                 Text = value, 
                 Foreground = Brushes.White, 
-                FontSize = 10, 
+                FontSize = 12, 
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center 
             };
@@ -359,8 +411,8 @@ namespace OllaMonitor
             
             var headerGrid = new Grid();
             var nameStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            nameStack.Children.Add(new TextBlock { Text = "⬤ ", Foreground = new SolidColorBrush(Color.FromRgb(48, 213, 200)), FontSize = 6, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
-            nameStack.Children.Add(new TextBlock { Text = model.Name, Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
+            nameStack.Children.Add(new TextBlock { Text = "⬤ ", Foreground = new SolidColorBrush(Color.FromRgb(48, 213, 200)), FontSize = 8, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
+            nameStack.Children.Add(new TextBlock { Text = model.Name, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
             
             var badgeBorder = new Border 
             { 
@@ -370,14 +422,42 @@ namespace OllaMonitor
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            badgeBorder.Child = new TextBlock { Text = model.Details.ParameterSize, Foreground = new SolidColorBrush(Color.FromRgb(142, 142, 147)), FontSize = 8, FontWeight = FontWeights.SemiBold };
+            badgeBorder.Child = new TextBlock { Text = model.Details.ParameterSize, Foreground = new SolidColorBrush(Color.FromRgb(142, 142, 147)), FontSize = 10, FontWeight = FontWeights.SemiBold };
             
             headerGrid.Children.Add(nameStack);
             headerGrid.Children.Add(badgeBorder);
             
-            var infoTxt = new TextBlock { Text = model.FormattedVramInfo, Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), FontSize = 9, Margin = new Thickness(0, 3, 0, 3) };
-            
-            var progress = new ProgressBar 
+            var infoTxt = new TextBlock { Text = model.FormattedVramInfo, Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), FontSize = 11, Margin = new Thickness(0, 3, 0, 3) };
+
+            // Extended model settings from /api/ps and cached /api/show data
+            _modelInfoCache.TryGetValue(model.Name, out var showInfo);
+
+            var specs = new List<string>();
+            if (!string.IsNullOrEmpty(model.Details.Family))
+                specs.Add($"Family: {model.Details.Family}");
+            if (!string.IsNullOrEmpty(model.Details.QuantizationLevel))
+                specs.Add($"Quant: {model.Details.QuantizationLevel}");
+            if (!string.IsNullOrEmpty(model.Details.Format))
+                specs.Add($"Format: {model.Details.Format}");
+            long? contextLength = model.ContextLength ?? showInfo?.GetModelInfoNumber(".context_length");
+            if (contextLength.HasValue)
+                specs.Add($"Context: {contextLength:N0}");
+            if (model.ExpiresAt.HasValue)
+                specs.Add($"Expires: {model.ExpiresAt.Value.ToLocalTime():HH:mm}");
+
+            var extraLines = new List<string>();
+            if (specs.Count > 0)
+                extraLines.Add(string.Join("  •  ", specs));
+            if (showInfo != null && showInfo.Capabilities.Count > 0)
+                extraLines.Add($"Capabilities: {string.Join(", ", showInfo.Capabilities)}");
+            if (showInfo != null && !string.IsNullOrWhiteSpace(showInfo.Parameters))
+            {
+                string formatted = FormatModelParameters(showInfo.Parameters);
+                if (formatted.Length > 0)
+                    extraLines.Add($"Params: {formatted}");
+            }
+
+            var progress = new ProgressBar
             { 
                 Height = 3, 
                 Value = model.VramPercentage, 
@@ -388,6 +468,17 @@ namespace OllaMonitor
             
             mainStack.Children.Add(headerGrid);
             mainStack.Children.Add(infoTxt);
+            foreach (var line in extraLines)
+            {
+                mainStack.Children.Add(new TextBlock
+                {
+                    Text = line,
+                    Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 0, 0, 3)
+                });
+            }
             mainStack.Children.Add(progress);
             
             var border = new Border 
@@ -402,13 +493,32 @@ namespace OllaMonitor
             return new ListBoxItem { Content = border, Padding = new Thickness(0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
         }
 
+        private static string FormatModelParameters(string parameters)
+        {
+            // /api/show "parameters" is newline-separated "key   value" pairs
+            var parts = new List<string>();
+            foreach (var raw in parameters.Split('\n'))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0)
+                    continue;
+                int split = line.IndexOf(' ');
+                if (split <= 0)
+                    continue;
+                string key = line.Substring(0, split);
+                string value = line.Substring(split).Trim();
+                parts.Add($"{key}={value}");
+            }
+            return string.Join(", ", parts);
+        }
+
         private ListBoxItem CreateMessageItem(string message)
         {
             var txt = new TextBlock 
             { 
                 Text = message, 
                 Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), 
-                FontSize = 10, 
+                FontSize = 12, 
                 HorizontalAlignment = HorizontalAlignment.Center, 
                 TextAlignment = TextAlignment.Center, 
                 Margin = new Thickness(10) 

@@ -5,16 +5,23 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:OllaMonitor"
         mc:Ignorable="d"
-        Title="OllaMonitor" 
-        Height="300" 
+        Title="OllaMonitor"
+        Height="300"
         Width="350"
-        WindowStyle="None" 
-        AllowsTransparency="True" 
+        MinHeight="300"
+        MinWidth="350"
+        WindowStyle="None"
+        AllowsTransparency="True"
         Background="Transparent"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen">
-    
+
+    <!-- Resizable on all edges via the chrome resize border -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="8" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
     <Window.Resources>
         <!-- Modern Scrollbar Style -->
         <Style TargetType="ScrollBar">
@@ -64,9 +71,9 @@
                 <!-- Main Grid Layout -->
                 <Grid.RowDefinitions>
                     <RowDefinition Height="40"/>  <!-- Header -->
-                    <RowDefinition Height="110"/> <!-- Cards -->
+                    <RowDefinition x:Name="CardsRow" Height="*" MinHeight="130"/> <!-- Cards (shrinks to 130 when details expand) -->
                     <RowDefinition Height="Auto"/> <!-- Details Header -->
-                    <RowDefinition Height="*"/>    <!-- Unified ListBox -->
+                    <RowDefinition x:Name="DetailsRow" Height="Auto"/> <!-- Unified ListBox (collapsed by default) -->
                     <RowDefinition Height="30"/>   <!-- Footer -->
                 </Grid.RowDefinitions>
 
@@ -79,8 +86,8 @@
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0,0,0">
                         <Ellipse x:Name="OllamaStatusIndicator" Width="8" Height="8" Fill="#FF8E8E93" Margin="0,1,8,0"/>
-                        <TextBlock Text="OllaMonitor" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="GpuModelLabel" Text="" Foreground="#80FFFFFF" FontSize="10" Margin="10,2,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="120"/>
+                        <TextBlock Text="OllaMonitor" Foreground="White" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="GpuModelLabel" Text="" Foreground="#80FFFFFF" FontSize="12" Margin="10,2,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="120"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
@@ -138,8 +145,8 @@
                 <!-- Core Dashboard Area (Fixed Row 1) -->
                 <Grid Grid.Row="1" Margin="10,6,5,2">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -148,75 +155,110 @@
 
                     <!-- CPU Card -->
                     <Border Grid.Row="0" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,6" Padding="8,5">
-                        <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
                             <Grid>
-                                <TextBlock Text="CPU" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="CpuText" Text="0.0%" Foreground="#FF0A84FF" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="CPU" Foreground="#80FFFFFF" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="CpuText" Text="0.0%" Foreground="#FF0A84FF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
-                            <ProgressBar x:Name="CpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF0A84FF" BorderThickness="0" MaxHeight="3"/>
-                            <Canvas x:Name="CpuCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                            <ProgressBar Grid.Row="1" x:Name="CpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF0A84FF" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas Grid.Row="2" x:Name="CpuCanvas" MinHeight="15" Background="#05FFFFFF" ClipToBounds="True">
                                 <Polyline x:Name="CpuPolyline" Stroke="#FF0A84FF" StrokeThickness="1"/>
                             </Canvas>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- RAM Card -->
                     <Border Grid.Row="0" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,6" Padding="8,5">
-                        <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
                             <Grid>
-                                <TextBlock Text="RAM" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="RamText" Text="0.0%" Foreground="#FFBF00FF" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="RAM" Foreground="#80FFFFFF" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="RamText" Text="0.0%" Foreground="#FFBF00FF" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
-                            <ProgressBar x:Name="RamProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFBF00FF" BorderThickness="0" MaxHeight="3"/>
-                            <Canvas x:Name="RamCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                            <ProgressBar Grid.Row="1" x:Name="RamProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFBF00FF" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas Grid.Row="2" x:Name="RamCanvas" MinHeight="15" Background="#05FFFFFF" ClipToBounds="True">
                                 <Polyline x:Name="RamPolyline" Stroke="#FFBF00FF" StrokeThickness="1"/>
                             </Canvas>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- GPU Card -->
                     <Border Grid.Row="1" Grid.Column="0" Background="#0CFFFFFF" CornerRadius="8" Margin="0,0,5,0" Padding="8,5">
-                        <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
                             <Grid>
-                                <TextBlock Text="GPU" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="GpuText" Text="0%" Foreground="#FF30D5C8" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="GPU" Foreground="#80FFFFFF" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="GpuText" Text="0%" Foreground="#FF30D5C8" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
-                            <ProgressBar x:Name="GpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF30D5C8" BorderThickness="0" MaxHeight="3"/>
-                            <Canvas x:Name="GpuCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                            <ProgressBar Grid.Row="1" x:Name="GpuProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FF30D5C8" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas Grid.Row="2" x:Name="GpuCanvas" MinHeight="15" Background="#05FFFFFF" ClipToBounds="True">
                                 <Polyline x:Name="GpuPolyline" Stroke="#FF30D5C8" StrokeThickness="1"/>
                             </Canvas>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- VRAM Card -->
                     <Border Grid.Row="1" Grid.Column="1" Background="#0CFFFFFF" CornerRadius="8" Margin="5,0,0,0" Padding="8,5">
-                        <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
                             <Grid>
-                                <TextBlock Text="VRAM" Foreground="#80FFFFFF" FontSize="10" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="VramText" Text="0.0 GB" Foreground="#FFFF9F0A" FontSize="12" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="VRAM" Foreground="#80FFFFFF" FontSize="12" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="VramText" Text="0.0 GB" Foreground="#FFFF9F0A" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
-                            <ProgressBar x:Name="VramProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFFF9F0A" BorderThickness="0" MaxHeight="3"/>
-                            <Canvas x:Name="VramCanvas" Height="15" Background="#05FFFFFF" ClipToBounds="True">
+                            <ProgressBar Grid.Row="1" x:Name="VramProgress" Height="3" Margin="0,4,0,4" Background="#20FFFFFF" Foreground="#FFFF9F0A" BorderThickness="0" MaxHeight="3"/>
+                            <Canvas Grid.Row="2" x:Name="VramCanvas" MinHeight="15" Background="#05FFFFFF" ClipToBounds="True">
                                 <Polyline x:Name="VramPolyline" Stroke="#FFFF9F0A" StrokeThickness="1"/>
                             </Canvas>
-                        </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
 
-                <!-- Details Switch Header (Row 2) -->
-                <Button x:Name="DetailsHeaderButton" Grid.Row="2" Click="DetailsHeaderButton_Click" Background="#10FFFFFF" BorderThickness="0" Margin="10,5,10,3" Padding="8,4" Cursor="Hand">
-                    <Button.Resources>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="6"/>
-                        </Style>
-                    </Button.Resources>
-                    <Grid HorizontalAlignment="Stretch">
-                        <TextBlock x:Name="DetailsHeaderText" Text="SYSTEM DETAILS ⇅" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
-                    </Grid>
-                </Button>
+                <!-- Details Header (Row 2): click toggles expand/collapse; mode switch appears when expanded -->
+                <Grid Grid.Row="2" Margin="10,5,10,3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="DetailsHeaderButton" Click="DetailsHeaderButton_Click" Background="#10FFFFFF" BorderThickness="0" Padding="8,4" Cursor="Hand" HorizontalContentAlignment="Stretch">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <Grid>
+                            <TextBlock x:Name="DetailsHeaderText" Text="SYSTEM DETAILS" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="DetailsChevron" Text="▼" Foreground="#80FFFFFF" FontSize="11" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DetailsModeButton" Grid.Column="1" Click="DetailsModeButton_Click" Background="#10FFFFFF" BorderThickness="0" Padding="8,4" Margin="4,0,0,0" Cursor="Hand" Visibility="Collapsed" ToolTip="Switch view">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <TextBlock Text="⇅" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                    </Button>
+                </Grid>
 
-                <!-- Consolidated details ListBox (Row 3) -->
-                <ListBox x:Name="DetailsListBox" Grid.Row="3" Background="Transparent" BorderThickness="0" Margin="10,0,10,4" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <!-- Consolidated details ListBox (Row 3), collapsed until header is clicked -->
+                <ListBox x:Name="DetailsListBox" Grid.Row="3" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Margin="10,0,10,4" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <!-- Bypass default Windows ListBox item hover highlights -->
@@ -233,7 +275,7 @@
 
                 <!-- Footer Bar -->
                 <Grid Grid.Row="4" Background="#0AFFFFFF">
-                    <TextBlock x:Name="StatusFooterText" Text="System monitoring active" Foreground="#60FFFFFF" FontSize="10" VerticalAlignment="Center" Margin="15,0,0,0"/>
+                    <TextBlock x:Name="StatusFooterText" Text="Connecting..." Foreground="#60FFFFFF" FontSize="12" VerticalAlignment="Center" Margin="15,0,0,0"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0">
                         <!-- Ollama Restart Button (visible only when offline) -->
                         <Button x:Name="OllamaRestartButton" Click="OllamaRestartButton_Click" Background="Transparent" BorderThickness="0" Width="30" Height="25" Cursor="Hand" Visibility="Collapsed" ToolTip="Start Ollama">
@@ -277,7 +319,7 @@
 
                     <!-- Settings Header -->
                     <Grid Grid.Row="0" Background="#10FFFFFF">
-                        <TextBlock Text="Settings" Foreground="White" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="15,0,0,0"/>
+                        <TextBlock Text="Settings" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="15,0,0,0"/>
                         <Button Click="SettingsCloseButton_Click" Background="Transparent" BorderThickness="0" Width="30" Height="30" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" Cursor="Hand">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
@@ -298,8 +340,8 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="20,12,20,12">
                         <!-- Ollama URL setting -->
-                        <TextBlock Text="OLLAMA API URL" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <TextBox x:Name="OllamaUrlInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="11" Margin="0,0,0,12">
+                        <TextBlock Text="OLLAMA API URL" Foreground="#80FFFFFF" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBox x:Name="OllamaUrlInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="13" Margin="0,0,0,12">
                             <TextBox.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -308,8 +350,8 @@
                         </TextBox>
 
                         <!-- Ollama start command setting -->
-                        <TextBlock Text="OLLAMA START COMMAND" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <TextBox x:Name="OllamaStartCommandInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="11" Margin="0,0,0,12" ToolTip="例: ollama serve / ollama run gemma3:12b">
+                        <TextBlock Text="OLLAMA START COMMAND" Foreground="#80FFFFFF" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBox x:Name="OllamaStartCommandInput" Background="#15FFFFFF" Foreground="White" BorderBrush="#30FFFFFF" BorderThickness="1" Padding="6" FontSize="13" Margin="0,0,0,12" ToolTip="e.g. ollama serve / ollama run gemma3:12b">
                             <TextBox.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -318,23 +360,23 @@
                         </TextBox>
 
                         <!-- Refresh Interval setting -->
-                        <TextBlock Text="REFRESH INTERVAL (SECONDS)" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <TextBlock Text="REFRESH INTERVAL (SECONDS)" Foreground="#80FFFFFF" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="40"/>
                             </Grid.ColumnDefinitions>
                             <Slider x:Name="RefreshRateSlider" Minimum="1" Maximum="10" Value="2" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" x:Name="RefreshRateLabel" Text="{Binding ElementName=RefreshRateSlider, Path=Value, StringFormat={}{0:F0}s}" Foreground="White" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" x:Name="RefreshRateLabel" Text="{Binding ElementName=RefreshRateSlider, Path=Value, StringFormat={}{0:F0}s}" Foreground="White" FontSize="13" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
 
                         <!-- Always on Top setting -->
                         <Grid Margin="0,0,0,15">
-                            <TextBlock Text="ALWAYS ON TOP" Foreground="#80FFFFFF" FontSize="9" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock Text="ALWAYS ON TOP" Foreground="#80FFFFFF" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                             <CheckBox x:Name="AlwaysOnTopCheckbox" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
 
-                        <Button Click="SaveSettingsButton_Click" Content="Save &amp; Apply" Background="#FF0A84FF" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="10" Cursor="Hand">
+                        <Button Click="SaveSettingsButton_Click" Content="Save &amp; Apply" Background="#FF0A84FF" Foreground="White" FontSize="14" FontWeight="SemiBold" BorderThickness="0" Padding="10" Cursor="Hand">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>

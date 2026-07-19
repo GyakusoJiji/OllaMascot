@@ -21,6 +21,9 @@ namespace OllaMonitor
 
             [JsonPropertyName("family")]
             public string Family { get; set; } = "";
+
+            [JsonPropertyName("format")]
+            public string Format { get; set; } = "";
         }
 
         public class ActiveModel
@@ -36,6 +39,12 @@ namespace OllaMonitor
 
             [JsonPropertyName("details")]
             public ModelDetails Details { get; set; } = new ModelDetails();
+
+            [JsonPropertyName("expires_at")]
+            public DateTimeOffset? ExpiresAt { get; set; }
+
+            [JsonPropertyName("context_length")]
+            public long? ContextLength { get; set; }
 
             // Computed helper properties for UI Binding
             public double VramPercentage => Size > 0 ? Math.Clamp((double)SizeVram * 100.0 / Size, 0.0, 100.0) : 0.0;
@@ -64,7 +73,44 @@ namespace OllaMonitor
             public List<ActiveModel> Models { get; set; } = new List<ActiveModel>();
         }
 
-        public static async Task<List<ActiveModel>> GetActiveModelsAsync(string baseUrl)
+        public class VersionResponse
+        {
+            [JsonPropertyName("version")]
+            public string Version { get; set; } = "";
+        }
+
+        public class ShowResponse
+        {
+            [JsonPropertyName("details")]
+            public ModelDetails Details { get; set; } = new ModelDetails();
+
+            // Modelfile parameters as newline-separated "key value" pairs
+            [JsonPropertyName("parameters")]
+            public string Parameters { get; set; } = "";
+
+            [JsonPropertyName("capabilities")]
+            public List<string> Capabilities { get; set; } = new List<string>();
+
+            // Keys are prefixed with the architecture (e.g. "llama.context_length")
+            [JsonPropertyName("model_info")]
+            public Dictionary<string, JsonElement> ModelInfo { get; set; } = new Dictionary<string, JsonElement>();
+
+            public long? GetModelInfoNumber(string keySuffix)
+            {
+                foreach (var kv in ModelInfo)
+                {
+                    if (kv.Key.EndsWith(keySuffix, StringComparison.OrdinalIgnoreCase)
+                        && kv.Value.ValueKind == JsonValueKind.Number
+                        && kv.Value.TryGetInt64(out long value))
+                    {
+                        return value;
+                    }
+                }
+                return null;
+            }
+        }
+
+        public static async Task<(bool Success, List<ActiveModel> Models)> TryGetActiveModelsAsync(string baseUrl)
         {
             try
             {
@@ -74,14 +120,58 @@ namespace OllaMonitor
                 {
                     string content = await response.Content.ReadAsStringAsync();
                     var data = JsonSerializer.Deserialize<PsResponse>(content);
-                    return data?.Models ?? new List<ActiveModel>();
+                    return (true, data?.Models ?? new List<ActiveModel>());
                 }
             }
             catch
             {
                 // Silently catch exception to keep dashboard clean during offline states
             }
-            return new List<ActiveModel>();
+            return (false, new List<ActiveModel>());
+        }
+
+        public static async Task<ShowResponse?> GetModelInfoAsync(string baseUrl, string modelName)
+        {
+            try
+            {
+                string url = baseUrl.TrimEnd('/') + "/api/show";
+                using var body = new StringContent(
+                    JsonSerializer.Serialize(new { model = modelName }),
+                    System.Text.Encoding.UTF8,
+                    "application/json");
+                var response = await _httpClient.PostAsync(url, body);
+                if (response.IsSuccessStatusCode)
+                {
+                    string content = await response.Content.ReadAsStringAsync();
+                    return JsonSerializer.Deserialize<ShowResponse>(content);
+                }
+            }
+            catch
+            {
+                // Silently catch exception to keep dashboard clean during offline states
+            }
+            return null;
+        }
+
+        public static async Task<string?> GetVersionAsync(string baseUrl)
+        {
+            try
+            {
+                string url = baseUrl.TrimEnd('/') + "/api/version";
+                var response = await _httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    string content = await response.Content.ReadAsStringAsync();
+                    var data = JsonSerializer.Deserialize<VersionResponse>(content);
+                    if (!string.IsNullOrWhiteSpace(data?.Version))
+                        return data.Version;
+                }
+            }
+            catch
+            {
+                // Silently catch exception to keep dashboard clean during offline states
+            }
+            return null;
         }
     }
 }
