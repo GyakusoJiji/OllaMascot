@@ -43,9 +43,10 @@ namespace OllaMonitor
             try
             {
                 InitializeComponent();
-                
+
                 // Apply window behavior based on settings
                 Topmost = _settings.AlwaysOnTop;
+                RestoreWindowBounds();
                 
                 // Initialize refresh timer
                 _timer.Tick += Timer_Tick;
@@ -107,6 +108,47 @@ namespace OllaMonitor
                 App.Log($"Exception in OnSourceInitialized: {ex}");
             }
             App.Log("MainWindow OnSourceInitialized completed.");
+        }
+
+        private void RestoreWindowBounds()
+        {
+            if (_settings.WindowWidth is double width && width >= MinWidth)
+            {
+                Width = width;
+            }
+            if (_settings.WindowHeight is double height && height >= MinHeight)
+            {
+                Height = height;
+            }
+            if (_settings.WindowLeft is double left && _settings.WindowTop is double top)
+            {
+                // Only restore the position if it is still within the virtual screen,
+                // e.g. a monitor may have been disconnected since last run
+                double screenLeft = SystemParameters.VirtualScreenLeft;
+                double screenTop = SystemParameters.VirtualScreenTop;
+                double screenRight = screenLeft + SystemParameters.VirtualScreenWidth;
+                double screenBottom = screenTop + SystemParameters.VirtualScreenHeight;
+                if (left + Width > screenLeft && left < screenRight &&
+                    top + Height > screenTop && top < screenBottom)
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual;
+                    Left = left;
+                    Top = top;
+                }
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            base.OnClosing(e);
+            var bounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+            _settings.WindowLeft = bounds.Left;
+            _settings.WindowTop = bounds.Top;
+            _settings.WindowWidth = bounds.Width;
+            _settings.WindowHeight = bounds.Height;
+            _settings.Save();
         }
 
         private void Timer_Tick(object? sender, EventArgs e)

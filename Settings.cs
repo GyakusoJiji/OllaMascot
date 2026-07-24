@@ -10,6 +10,10 @@ namespace OllaMonitor
         public string OllamaStartCommand { get; set; } = "ollama serve";
         public double RefreshIntervalSeconds { get; set; } = 2.0;
         public bool AlwaysOnTop { get; set; } = true;
+        public double? WindowLeft { get; set; }
+        public double? WindowTop { get; set; }
+        public double? WindowWidth { get; set; }
+        public double? WindowHeight { get; set; }
 
         private static readonly string FolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
