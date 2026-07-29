@@ -1,0 +1,63 @@
+<Window x:Class="OllaMascot.MascotWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:OllaMascot"
+        mc:Ignorable="d"
+        Title="OllaMascot"
+        Width="64"
+        Height="64"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="Manual">
+
+    <!-- No WindowChrome: its resize border would claim the outer 8px on every edge, leaving only
+         48x48 of a 64x64 window able to receive clicks. -->
+
+    <!-- Not Transparent: AllowsTransparency makes this a layered window, and Windows hit-tests
+         layered windows against the alpha channel, so fully transparent pixels pass the click
+         through to whatever is behind. #01 alpha is invisible but keeps the whole 64x64 grabbable. -->
+    <Grid x:Name="Root"
+          Background="#01000000"
+          MouseLeftButtonDown="Root_MouseLeftButtonDown"
+          MouseMove="Root_MouseMove"
+          MouseLeftButtonUp="Root_MouseLeftButtonUp">
+
+        <Grid.ToolTip>
+            <ToolTip x:Name="SummaryToolTip"
+                     Content="OllaMascot"
+                     Background="#1C1C1E"
+                     Foreground="White"
+                     BorderBrush="#30FFFFFF"
+                     Padding="8,4,8,4"/>
+        </Grid.ToolTip>
+
+        <Grid.ContextMenu>
+            <ContextMenu x:Name="MascotContextMenu" Background="#1C1C1E" Foreground="White" BorderBrush="#30FFFFFF">
+                <MenuItem Header="Open Dashboard" Click="ContextOpenDashboard_Click"/>
+                <MenuItem Header="Manual Refresh" Click="ContextRefresh_Click"/>
+                <MenuItem Header="Always on Top" x:Name="ContextAlwaysOnTop" IsCheckable="True" Click="ContextAlwaysOnTop_Click"/>
+                <Separator Background="#30FFFFFF"/>
+                <!-- No "Hide": neither window shows in the taskbar, so a hidden mascot would be
+                     unreachable. Exit is the only way to take it off the desktop. -->
+                <MenuItem Header="Exit" Click="ContextExit_Click"/>
+            </ContextMenu>
+        </Grid.ContextMenu>
+
+        <!-- The sprite-sheet frame picked by the current GPU load. 32x32 pixel art doubled to 64:
+             NearestNeighbor keeps the pixels crisp instead of blurring them the way the default
+             bilinear scaler would -->
+        <Image x:Name="MascotImage"
+               Width="64"
+               Height="64"
+               Stretch="Fill"
+               SnapsToDevicePixels="True"
+               RenderOptions.BitmapScalingMode="NearestNeighbor"
+               IsHitTestVisible="False"/>
+    </Grid>
+</Window>

@@ -5,11 +5,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
-namespace OllaMonitor
+namespace OllaMascot
 {
     public class OllamaClient
     {
-        private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        // 2s was too tight: /api/ps routinely misses it while the GPU is saturated by an inference,
+        // which read as "Ollama is offline" even though the server was healthy
+        private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
 
         public class ModelDetails
         {

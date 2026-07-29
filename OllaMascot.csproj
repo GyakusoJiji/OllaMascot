@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mascot animation frames as a 10x10 grid of 32x32 cells, sliced at startup by MascotIcons
+         and played back by MascotWindow. A sprite sheet rather than the GIF: GIF frames are
+         content-cropped sub-images that WPF's decoder hands over un-composited, and PNG carries
+         full 8-bit alpha with no palette limit. -->
+    <Resource Include="mascot_sheet.png" />
+  </ItemGroup>
+
+</Project>

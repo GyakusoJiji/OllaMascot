@@ -16,3 +16,7 @@ Desktop.ini
 
 # Diagnostics
 *.log
+
+# Source footage for the mascot animation. The sprite sheet baked from it is what the app
+# loads; keeping the 2.6MB original out avoids growing the history for a file nothing reads.
+ollamaAnume.mp4

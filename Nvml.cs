@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace OllaMonitor
+namespace OllaMascot
 {
     public static class Nvml
     {

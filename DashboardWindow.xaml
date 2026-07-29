@@ -1,11 +1,11 @@
-<Window x:Class="OllaMonitor.MainWindow"
+<Window x:Class="OllaMascot.DashboardWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:OllaMonitor"
+        xmlns:local="clr-namespace:OllaMascot"
         mc:Ignorable="d"
-        Title="OllaMonitor"
+        Title="OllaMascot"
         Height="300"
         Width="350"
         MinHeight="300"
@@ -14,7 +14,7 @@
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="CanResize"
-        ShowInTaskbar="True"
+        ShowInTaskbar="False"
         WindowStartupLocation="CenterScreen">
 
     <!-- Resizable on all edges via the chrome resize border -->
@@ -86,7 +86,7 @@
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0,0,0">
                         <Ellipse x:Name="OllamaStatusIndicator" Width="8" Height="8" Fill="#FF8E8E93" Margin="0,1,8,0"/>
-                        <TextBlock Text="OllaMonitor" Foreground="White" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock Text="OllaMascot" Foreground="White" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <TextBlock x:Name="GpuModelLabel" Text="" Foreground="#80FFFFFF" FontSize="12" Margin="10,2,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="120"/>
                     </StackPanel>
 

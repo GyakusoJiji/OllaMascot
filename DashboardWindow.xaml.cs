@@ -9,13 +9,13 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using System.Threading.Tasks;
 
-namespace OllaMonitor
+namespace OllaMascot
 {
-    public partial class MainWindow : Window
+    public partial class DashboardWindow : Window
     {
         private readonly Settings _settings;
-        private readonly DispatcherTimer _timer;
-        
+        private readonly MetricsService _metrics;
+
         // History collections for trend lines
         private readonly List<double> _cpuHistory = new List<double>();
         private readonly List<double> _ramHistory = new List<double>();
@@ -29,17 +29,28 @@ namespace OllaMonitor
         }
         private DetailsViewMode _currentMode = DetailsViewMode.SystemDetails;
         private bool _detailsExpanded = false;
-        private List<OllamaClient.ActiveModel> _activeModels = new List<OllamaClient.ActiveModel>();
-        private readonly Dictionary<string, OllamaClient.ShowResponse?> _modelInfoCache = new Dictionary<string, OllamaClient.ShowResponse?>();
-        private string? _ollamaVersion = null;
-        private bool _isOllamaReachable = false;
+        private MetricsService.Snapshot _snapshot = new MetricsService.Snapshot();
         private bool _restartPromptShown = false;
 
-        public MainWindow()
+        // Last bounds observed while the window was actually restored on screen. A minimized window
+        // reports Left/Top of -32000, and one that has never been shown reports NaN, so neither can
+        // be read at save time — the position has to be captured as the user moves it.
+        private Rect? _lastNormalBounds;
+
+        // The desktop mascot plays the animation; this is the same sprite used as the window icon,
+        // posed by GPU load, which is what Alt-Tab and dialogs show
+        private readonly MascotIcons? _mascot;
+        private int _lastMascotIndex = -1;
+
+        /// <summary>Raised when the user toggles always-on-top here, so the mascot can follow.</summary>
+        public event EventHandler<bool>? AlwaysOnTopChanged;
+
+        public DashboardWindow(MetricsService metrics, Settings settings, MascotIcons? mascot)
         {
-            App.Log("MainWindow constructor started.");
-            _settings = Settings.Load();
-            _timer = new DispatcherTimer();
+            App.Log("DashboardWindow constructor started.");
+            _metrics = metrics;
+            _settings = settings;
+            _mascot = mascot;
             try
             {
                 InitializeComponent();
@@ -47,67 +58,65 @@ namespace OllaMonitor
                 // Apply window behavior based on settings
                 Topmost = _settings.AlwaysOnTop;
                 RestoreWindowBounds();
-                
-                // Initialize refresh timer
-                _timer.Tick += Timer_Tick;
-                UpdateTimerInterval();
-                
+
+                // Anything that does not need an HWND is initialized here rather than in
+                // OnSourceInitialized
+                OllamaUrlInput.Text = _settings.OllamaUrl;
+                OllamaStartCommandInput.Text = _settings.OllamaStartCommand;
+                RefreshRateSlider.Value = _settings.RefreshIntervalSeconds;
+                RefreshRateLabel.Text = $"{_settings.RefreshIntervalSeconds:F0}s";
+                AlwaysOnTopCheckbox.IsChecked = _settings.AlwaysOnTop;
+                ContextAlwaysOnTop.IsChecked = _settings.AlwaysOnTop;
+                GpuModelLabel.Text = Nvml.IsAvailable ? Nvml.GpuName : "No Nvidia GPU";
+
+                // Start on the idle pose so the window never flashes a default icon
+                if (_mascot != null)
+                {
+                    _lastMascotIndex = 0;
+                    Icon = _mascot[0];
+                }
+
                 // Attach size changed events to redraw sparklines when layout settles
                 CpuCanvas.SizeChanged += (s, e) => RedrawAllSparklines();
                 RamCanvas.SizeChanged += (s, e) => RedrawAllSparklines();
                 GpuCanvas.SizeChanged += (s, e) => RedrawAllSparklines();
                 VramCanvas.SizeChanged += (s, e) => RedrawAllSparklines();
+
+                // Follow the window as the user drags or resizes it, so the position carries over to
+                // the next launch even though it is hidden rather than closed when the app exits
+                LocationChanged += (s, e) => CaptureNormalBounds();
+                SizeChanged += (s, e) => CaptureNormalBounds();
+                StateChanged += (s, e) => CaptureNormalBounds();
+
+                // The service polls whether or not this window is on screen; history accumulates
+                // either way and is drawn once the canvases have a size
+                _metrics.Updated += OnMetricsUpdated;
             }
             catch (Exception ex)
             {
-                App.Log($"Exception in MainWindow constructor: {ex}");
+                App.Log($"Exception in DashboardWindow constructor: {ex}");
             }
-            App.Log("MainWindow constructor completed.");
+            App.Log("DashboardWindow constructor completed.");
         }
 
         protected override void OnSourceInitialized(EventArgs e)
         {
-            App.Log("MainWindow OnSourceInitialized started.");
+            App.Log("DashboardWindow OnSourceInitialized started.");
             try
             {
                 base.OnSourceInitialized(e);
-                
+
                 // Apply Mica or Acrylic background effect for Windows 11
                 App.Log("Applying system backdrop...");
                 SystemBackdropHelper.ApplyBackdrop(this, useAcrylic: true);
-                
-                // Initialize UI elements state
-                OllamaUrlInput.Text = _settings.OllamaUrl;
-                RefreshRateSlider.Value = _settings.RefreshIntervalSeconds;
-                RefreshRateLabel.Text = $"{_settings.RefreshIntervalSeconds:F0}s";
-                AlwaysOnTopCheckbox.IsChecked = _settings.AlwaysOnTop;
-                ContextAlwaysOnTop.IsChecked = _settings.AlwaysOnTop;
-                
+
                 UpdatePinButtonState();
-
-                // Set GPU name label if NVML is active
-                if (Nvml.IsAvailable)
-                {
-                    GpuModelLabel.Text = Nvml.GpuName;
-                }
-                else
-                {
-                    GpuModelLabel.Text = "No Nvidia GPU";
-                }
-
-                // Start polling system metrics
-                App.Log("Starting timer...");
-                _timer.Start();
-                
-                // Run first update immediately
-                App.Log("Running initial metrics update...");
-                UpdateMetrics();
             }
             catch (Exception ex)
             {
                 App.Log($"Exception in OnSourceInitialized: {ex}");
             }
-            App.Log("MainWindow OnSourceInitialized completed.");
+            App.Log("DashboardWindow OnSourceInitialized completed.");
         }
 
         private void RestoreWindowBounds()
@@ -141,9 +150,45 @@ namespace OllaMonitor
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             base.OnClosing(e);
-            var bounds = WindowState == WindowState.Normal
-                ? new Rect(Left, Top, Width, Height)
-                : RestoreBounds;
+            if (e.Cancel)
+                return;
+
+            // The desktop mascot is the app's real presence, so closing the dashboard only puts it
+            // away; monitoring carries on and Exit from the mascot's menu is what ends the process
+            if (!App.IsExiting)
+            {
+                e.Cancel = true;
+                HideDashboard();
+            }
+        }
+
+        /// <summary>Puts the dashboard away, keeping its position for the next time it is opened.</summary>
+        private void HideDashboard()
+        {
+            SaveBounds();
+            Hide();
+        }
+
+        /// <summary>Records the bounds whenever the window is restored, ignoring minimized state.</summary>
+        private void CaptureNormalBounds()
+        {
+            if (WindowState != WindowState.Normal || !IsVisible)
+                return;
+            if (double.IsNaN(Left) || double.IsNaN(Top))
+                return;
+
+            _lastNormalBounds = new Rect(Left, Top, Width, Height);
+        }
+
+        /// <summary>Persists the last on-screen bounds so the next run reopens where the user left it.</summary>
+        public void SaveBounds()
+        {
+            // No captured bounds means the dashboard was never opened this run; keeping whatever is
+            // already on disk is correct, and it avoids writing the -32000 / NaN placeholders that a
+            // minimized or never-shown window reports
+            if (_lastNormalBounds is not Rect bounds)
+                return;
+
             _settings.WindowLeft = bounds.Left;
             _settings.WindowTop = bounds.Top;
             _settings.WindowWidth = bounds.Width;
@@ -151,47 +196,61 @@ namespace OllaMonitor
             _settings.Save();
         }
 
-        private void Timer_Tick(object? sender, EventArgs e)
+        /// <summary>Applies an always-on-top change made elsewhere, without echoing it back.</summary>
+        public void SyncAlwaysOnTop(bool value)
         {
-            UpdateMetrics();
+            Topmost = value;
+            ContextAlwaysOnTop.IsChecked = value;
+            AlwaysOnTopCheckbox.IsChecked = value;
+            UpdatePinButtonState();
         }
 
-        private async void UpdateMetrics()
+        private void ApplyAlwaysOnTop(bool value)
         {
+            SyncAlwaysOnTop(value);
+            AlwaysOnTopChanged?.Invoke(this, value);
+        }
+
+        private void OnMetricsUpdated(object? sender, MetricsService.Snapshot snapshot)
+        {
+            _snapshot = snapshot;
             try
             {
-                // 1. CPU Metrics
-                float cpuUsage = HardwareMonitor.GetCpuUtilization();
-                CpuText.Text = $"{cpuUsage:F1}%";
-                CpuProgress.Value = cpuUsage;
-                UpdateSparkline(CpuPolyline, CpuCanvas, _cpuHistory, cpuUsage);
-
-                // 2. RAM Metrics
-                if (HardwareMonitor.GetRamMetrics(out ulong totalRam, out ulong usedRam))
+                // 0. Window icon: the mascot's pose is the GPU load indicator, mirroring the tray.
+                // Reassigning Icon costs a WM_SETICON round trip, so only do it on a frame change.
+                if (_mascot != null)
                 {
-                    double totalRamGb = totalRam / 1073741824.0;
-                    double usedRamGb = usedRam / 1073741824.0;
-                    double ramPercent = totalRamGb > 0 ? (usedRamGb / totalRamGb) * 100.0 : 0.0;
-
-                    RamText.Text = $"{ramPercent:F1}%";
-                    RamProgress.Value = ramPercent;
-                    UpdateSparkline(RamPolyline, RamCanvas, _ramHistory, ramPercent);
+                    int index = _mascot.IndexForPercent(snapshot.GpuAvailable ? snapshot.GpuPercent : 0);
+                    if (index != _lastMascotIndex)
+                    {
+                        _lastMascotIndex = index;
+                        Icon = _mascot[index];
+                    }
                 }
 
+                // 0b. The live readout the tray tooltip carries, repeated here for Alt-Tab
+                Title = MetricsService.FormatSummary(snapshot);
+
+                // 1. CPU Metrics
+                CpuText.Text = $"{snapshot.CpuPercent:F1}%";
+                CpuProgress.Value = snapshot.CpuPercent;
+                UpdateSparkline(CpuPolyline, CpuCanvas, _cpuHistory, snapshot.CpuPercent);
+
+                // 2. RAM Metrics
+                RamText.Text = $"{snapshot.RamPercent:F1}%";
+                RamProgress.Value = snapshot.RamPercent;
+                UpdateSparkline(RamPolyline, RamCanvas, _ramHistory, snapshot.RamPercent);
+
                 // 3. GPU & VRAM Metrics (NVIDIA NVML)
-                if (Nvml.IsAvailable && Nvml.GetGpuMetrics(out uint gpuUtilization, out ulong totalVram, out ulong usedVram))
+                if (snapshot.GpuAvailable)
                 {
-                    double totalVramGb = totalVram / 1073741824.0;
-                    double usedVramGb = usedVram / 1073741824.0;
-                    double vramPercent = totalVramGb > 0 ? (usedVramGb / totalVramGb) * 100.0 : 0.0;
+                    GpuText.Text = $"{snapshot.GpuPercent:F0}%";
+                    GpuProgress.Value = snapshot.GpuPercent;
+                    UpdateSparkline(GpuPolyline, GpuCanvas, _gpuHistory, snapshot.GpuPercent);
 
-                    GpuText.Text = $"{gpuUtilization}%";
-                    GpuProgress.Value = gpuUtilization;
-                    UpdateSparkline(GpuPolyline, GpuCanvas, _gpuHistory, gpuUtilization);
-
-                    VramText.Text = $"{usedVramGb:F1} GB";
-                    VramProgress.Value = vramPercent;
-                    UpdateSparkline(VramPolyline, VramCanvas, _vramHistory, vramPercent);
+                    VramText.Text = $"{snapshot.VramUsedGb:F1} GB";
+                    VramProgress.Value = snapshot.VramPercent;
+                    UpdateSparkline(VramPolyline, VramCanvas, _vramHistory, snapshot.VramPercent);
                 }
                 else
                 {
@@ -205,56 +264,14 @@ namespace OllaMonitor
                     UpdateSparkline(VramPolyline, VramCanvas, _vramHistory, 0);
                 }
 
-                // 4. Ollama Active Models Query
-                await QueryOllamaStatus();
-                
-                // 5. Update Unified Details List
-                RefreshDetailsDisplay();
-            }
-            catch (Exception ex)
-            {
-                App.Log($"Exception in UpdateMetrics: {ex}");
-            }
-        }
-
-        private async Task QueryOllamaStatus()
-        {
-            try
-            {
-                // Reachability is judged by the /api/ps call itself; the previous
-                // separate 500ms ping to /api/tags timed out routinely and reported
-                // "connection failed" even while Ollama was healthy
-                var (reachable, models) = await OllamaClient.TryGetActiveModelsAsync(_settings.OllamaUrl);
-                _activeModels = models;
-                _isOllamaReachable = reachable;
-
-                // Fetch the server version once per online period; drop it when offline
-                if (!reachable)
-                {
-                    _ollamaVersion = null;
-                }
-                else if (_ollamaVersion == null)
-                {
-                    _ollamaVersion = await OllamaClient.GetVersionAsync(_settings.OllamaUrl);
-                }
-
-                // Fetch /api/show info once per model; retry next tick if it failed
-                foreach (var model in _activeModels)
-                {
-                    if (!_modelInfoCache.TryGetValue(model.Name, out var cached) || cached == null)
-                    {
-                        _modelInfoCache[model.Name] = await OllamaClient.GetModelInfoAsync(_settings.OllamaUrl, model.Name);
-                    }
-                }
-
-                if (!_isOllamaReachable)
+                // 4. Ollama status footer
+                if (!snapshot.OllamaReachable)
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
                     StatusFooterText.Text = "Ollama connection failed";
                     OllamaRestartButton.Visibility = Visibility.Visible;
-                    PromptOllamaRestart();
                 }
-                else if (_activeModels.Count == 0)
+                else if (snapshot.ActiveModels.Count == 0)
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(142, 142, 147)); // System Gray
                     StatusFooterText.Text = "Ollama is idle";
@@ -264,34 +281,36 @@ namespace OllaMonitor
                 else
                 {
                     OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(48, 209, 88)); // System Green
-                    StatusFooterText.Text = $"{_activeModels.Count} model(s) active";
+                    StatusFooterText.Text = $"{snapshot.ActiveModels.Count} model(s) active";
                     OllamaRestartButton.Visibility = Visibility.Collapsed;
                     _restartPromptShown = false;
                 }
+
+                // 5. Update Unified Details List
+                RefreshDetailsDisplay();
             }
-            catch
+            catch (Exception ex)
             {
-                _isOllamaReachable = false;
-                OllamaStatusIndicator.Fill = new SolidColorBrush(Color.FromRgb(255, 69, 58)); // System Red
-                StatusFooterText.Text = "Ollama connection error";
-                OllamaRestartButton.Visibility = Visibility.Visible;
-                PromptOllamaRestart();
+                App.Log($"Exception in OnMetricsUpdated: {ex}");
             }
         }
 
-        private void PromptOllamaRestart()
+        /// <summary>Offers to start Ollama. Shown once per offline period; reset when it returns.</summary>
+        public void PromptOllamaRestart()
         {
-            // Show the dialog only once per offline period; reset when Ollama comes back online
             if (_restartPromptShown)
                 return;
             _restartPromptShown = true;
 
-            var result = MessageBox.Show(
-                this,
-                "Ollama is not running.\nDo you want to restart Ollama?",
-                "OllaMonitor - Ollama Not Detected",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+            const string message = "Ollama is not running.\nDo you want to restart Ollama?";
+            const string caption = "OllaMascot - Ollama Not Detected";
+
+            // The dashboard may never have been opened this run, in which case it has no HWND to
+            // own the dialog and the ownerless overload is the only one that works
+            bool hasHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle != IntPtr.Zero;
+            var result = hasHandle
+                ? MessageBox.Show(this, message, caption, MessageBoxButton.YesNo, MessageBoxImage.Warning)
+                : MessageBox.Show(message, caption, MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (result == MessageBoxResult.Yes)
             {
@@ -356,55 +375,41 @@ namespace OllaMonitor
                 if (_currentMode == DetailsViewMode.SystemDetails)
                 {
                     // 1. RAM info
-                    if (HardwareMonitor.GetRamMetrics(out ulong totalRam, out ulong usedRam))
-                    {
-                        double totalRamGb = totalRam / 1073741824.0;
-                        double usedRamGb = usedRam / 1073741824.0;
-                        double ramPercent = totalRamGb > 0 ? (usedRamGb / totalRamGb) * 100.0 : 0.0;
-                        DetailsListBox.Items.Add(CreateSystemDetailItem("System Memory:", $"{usedRamGb:F1} / {totalRamGb:F1} GB ({ramPercent:F0}%)"));
-                    }
-                    
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("System Memory:", $"{_snapshot.RamUsedGb:F1} / {_snapshot.RamTotalGb:F1} GB ({_snapshot.RamPercent:F0}%)"));
+
                     // 2. VRAM info
-                    if (Nvml.IsAvailable && Nvml.GetGpuMetrics(out _, out ulong totalVram, out ulong usedVram))
-                    {
-                        double totalVramGb = totalVram / 1073741824.0;
-                        double usedVramGb = usedVram / 1073741824.0;
-                        double vramPercent = totalVramGb > 0 ? (usedVramGb / totalVramGb) * 100.0 : 0.0;
-                        DetailsListBox.Items.Add(CreateSystemDetailItem("Graphics VRAM:", $"{usedVramGb:F1} / {totalVramGb:F1} GB ({vramPercent:F0}%)"));
-                    }
-                    else
-                    {
-                        DetailsListBox.Items.Add(CreateSystemDetailItem("Graphics VRAM:", "N/A"));
-                    }
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("Graphics VRAM:", _snapshot.GpuAvailable
+                        ? $"{_snapshot.VramUsedGb:F1} / {_snapshot.VramTotalGb:F1} GB ({_snapshot.VramPercent:F0}%)"
+                        : "N/A"));
 
                     // 3. GPU Model
                     DetailsListBox.Items.Add(CreateSystemDetailItem("GPU Model:", Nvml.IsAvailable ? Nvml.GpuName : "None / Non-Nvidia"));
-                    
+
                     // 4. Ollama URL
                     DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Endpoint:", _settings.OllamaUrl));
 
                     // 5. Ollama version
-                    DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Version:", _ollamaVersion ?? "N/A"));
+                    DetailsListBox.Items.Add(CreateSystemDetailItem("Ollama Version:", _snapshot.OllamaVersion ?? "N/A"));
 
                     // 6. Currently loaded LLM model(s)
-                    string modelNames = _activeModels.Count > 0
-                        ? string.Join(", ", _activeModels.ConvertAll(m => m.Name))
+                    string modelNames = _snapshot.ActiveModels.Count > 0
+                        ? string.Join(", ", _snapshot.ActiveModels.ConvertAll(m => m.Name))
                         : "None";
                     DetailsListBox.Items.Add(CreateSystemDetailItem("Active Model:", modelNames));
                 }
                 else // ActiveModels
                 {
-                    if (!_isOllamaReachable)
+                    if (!_snapshot.OllamaReachable)
                     {
                         DetailsListBox.Items.Add(CreateMessageItem("Ollama is offline or unreachable."));
                     }
-                    else if (_activeModels.Count == 0)
+                    else if (_snapshot.ActiveModels.Count == 0)
                     {
                         DetailsListBox.Items.Add(CreateMessageItem("Ollama is idle. No models loaded."));
                     }
                     else
                     {
-                        foreach (var model in _activeModels)
+                        foreach (var model in _snapshot.ActiveModels)
                         {
                             DetailsListBox.Items.Add(CreateActiveModelItem(model));
                         }
@@ -472,7 +477,7 @@ namespace OllaMonitor
             var infoTxt = new TextBlock { Text = model.FormattedVramInfo, Foreground = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255)), FontSize = 11, Margin = new Thickness(0, 3, 0, 3) };
 
             // Extended model settings from /api/ps and cached /api/show data
-            _modelInfoCache.TryGetValue(model.Name, out var showInfo);
+            var showInfo = _metrics.GetModelInfo(model.Name);
 
             var specs = new List<string>();
             if (!string.IsNullOrEmpty(model.Details.Family))
@@ -608,11 +613,6 @@ namespace OllaMonitor
             DrawSparkline(VramPolyline, VramCanvas, _vramHistory);
         }
 
-        private void UpdateTimerInterval()
-        {
-            _timer.Interval = TimeSpan.FromSeconds(_settings.RefreshIntervalSeconds);
-        }
-
         private void UpdatePinButtonState()
         {
             try
@@ -647,7 +647,9 @@ namespace OllaMonitor
 
         private void MinimizeButton_Click(object sender, RoutedEventArgs e)
         {
-            WindowState = WindowState.Minimized;
+            // There is no taskbar button to minimize to; the mascot stays on the desktop and this
+            // just tucks the dashboard back behind it
+            HideDashboard();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -657,12 +659,10 @@ namespace OllaMonitor
 
         private void PinButton_Click(object sender, RoutedEventArgs e)
         {
-            Topmost = !Topmost;
-            _settings.AlwaysOnTop = Topmost;
+            _settings.AlwaysOnTop = !Topmost;
             _settings.Save();
-            
-            ContextAlwaysOnTop.IsChecked = Topmost;
-            UpdatePinButtonState();
+
+            ApplyAlwaysOnTop(_settings.AlwaysOnTop);
         }
 
         // Settings Panel handlers
@@ -694,33 +694,32 @@ namespace OllaMonitor
             _settings.AlwaysOnTop = AlwaysOnTopCheckbox.IsChecked == true;
             _settings.Save();
 
-            Topmost = _settings.AlwaysOnTop;
-            ContextAlwaysOnTop.IsChecked = Topmost;
-            UpdatePinButtonState();
-            UpdateTimerInterval();
+            ApplyAlwaysOnTop(_settings.AlwaysOnTop);
+            _metrics.ApplyInterval();
 
             SettingsPanel.Visibility = Visibility.Collapsed;
-            UpdateMetrics();
+            _metrics.RefreshNow();
         }
 
         // Context Menu handlers
         private void ContextAlwaysOnTop_Click(object sender, RoutedEventArgs e)
         {
-            Topmost = ContextAlwaysOnTop.IsChecked;
-            _settings.AlwaysOnTop = Topmost;
+            _settings.AlwaysOnTop = ContextAlwaysOnTop.IsChecked;
             _settings.Save();
-            
-            UpdatePinButtonState();
+
+            ApplyAlwaysOnTop(_settings.AlwaysOnTop);
         }
 
         private void ContextRefresh_Click(object sender, RoutedEventArgs e)
         {
-            UpdateMetrics();
+            _metrics.RefreshNow();
         }
 
         private void ContextExit_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            // Unlike the close button, this really does end the app, mascot included
+            SaveBounds();
+            App.RequestExit();
         }
 
         // Ollama restart handler
@@ -731,48 +730,14 @@ namespace OllaMonitor
 
         private void StartOllama()
         {
-            try
+            if (OllamaLauncher.Start(_settings))
             {
-                // Discover ollama CLI executable path; fall back to "ollama" on PATH
-                string ollamaPath = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Programs", "Ollama", "ollama.exe"
-                );
-
-                if (!System.IO.File.Exists(ollamaPath))
-                {
-                    ollamaPath = "ollama";
-                }
-
-                // The stored command can be pasted verbatim (e.g. "ollama run gemma3:12b");
-                // strip the leading "ollama" token since the executable path is resolved above
-                string command = (_settings.OllamaStartCommand ?? "").Trim();
-                if (command.Length == 0 || command.Equals("ollama", StringComparison.OrdinalIgnoreCase))
-                {
-                    command = "serve";
-                }
-                else if (command.StartsWith("ollama ", StringComparison.OrdinalIgnoreCase))
-                {
-                    command = command.Substring("ollama ".Length).Trim();
-                }
-
-                // Launch the server headless: no console window, no tray icon
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = ollamaPath,
-                    Arguments = command,
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                });
-
                 StatusFooterText.Text = "Starting Ollama...";
                 OllamaRestartButton.Visibility = Visibility.Collapsed;
-                App.Log("Ollama restart requested.");
             }
-            catch (Exception ex)
+            else
             {
                 StatusFooterText.Text = "Failed to start Ollama";
-                App.Log($"Exception starting Ollama: {ex}");
             }
         }
     }
